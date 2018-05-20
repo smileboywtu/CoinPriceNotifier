@@ -1,0 +1,21 @@
+
+## feixiaohao
+userid: 17671601524
+passwd: chorescb
+
+## aliyun config
+accesskey: YIGevqWhISrPBqf4nyCO3Wt9DfHVzc
+accessid: LTAIVi05hIg80A8K
+signname: 房产价格监控
+templatecode: SMS_135043012
+
+## user config
+notifyphone: 17671601524
+notifytimeperiod: 3600
+lowpricepercent: -2.0
+highpricepercent: 3.0
+cointype:
+ - CMT
+ - IOST
+
+

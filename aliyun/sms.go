@@ -27,7 +27,7 @@ type SMSContentCtx struct {
 
 func SendSMS(opts AliyunSMSOpt, context SMSContentCtx) error {
 
-	dysms.HTTPDebugEnable = true
+	//dysms.HTTPDebugEnable = true
 	dysms.SetACLClient(opts.AccessID, opts.AccessKey)
 
 	params, err := json.Marshal(context)

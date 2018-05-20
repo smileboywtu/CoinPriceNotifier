@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"os/signal"
 
-	"github.com/smileboywtu/CoinNotify/feixiaohao"
+	"github.com/urfave/cli"
+	"github.com/yudai/gotty/pkg/homedir"
 	"github.com/smileboywtu/CoinNotify/aliyun"
+	"github.com/smileboywtu/CoinNotify/common"
+	"github.com/smileboywtu/CoinNotify/feixiaohao"
 )
-
-const ACCESSID = "LTAIVi05hIg80A8K"
-const ACCESSKEY = "YIGevqWhISrPBqf4nyCO3Wt9DfHVzc"
 
 type TaskContext struct {
 	LastNotifyTime int64
@@ -95,40 +95,40 @@ func DoCheck(percent string, filter feixiaohao.CoinFilter) bool {
 	return true
 }
 
-func main() {
+func Start(config *AppConfigOpt) {
 
 	loginmeta := feixiaohao.UserLoginMeta{
-		UserID:     "17671601524",
-		PassWD:     "chorescb",
+		UserID:     config.UserName,
+		PassWD:     config.PassWD,
 		IsRemember: false,
 	}
 	cookies, err := feixiaohao.Login(loginmeta)
 	if err != nil {
 		fmt.Println(err)
-		os.Exit(-1)
+		os.Exit(1)
 	}
 
 	// start renew task
 	quit := RenewCookies(cookies, loginmeta)
 
 	aliopts := aliyun.AliyunSMSOpt{
-		AccessKey:    ACCESSKEY,
-		AccessID:     ACCESSID,
-		SignName:     "房产价格监控",
-		TemplateCode: "SMS_135043012",
-		NotifyPhone:  "17671601524",
+		AccessKey:    config.AccessKey,
+		AccessID:     config.AccessID,
+		SignName:     config.SignName,
+		TemplateCode: config.TemplateCode,
+		NotifyPhone:  config.NotifyPhone,
 	}
 	filter := feixiaohao.CoinFilter{
-		[]string{"CMT", "IOST"},
-		5.0,
-		-2,
-		1800,
+		CoinType:   config.CoinTypes,
+		High:       config.PriceHighPercent,
+		Low:        config.PriceLowPercent,
+		TimePeriod: config.NotifyTimePeriod,
 	}
 	taskctx := &TaskContext{
-		0,
-		cookies,
-		filter,
-		aliopts,
+		LastNotifyTime: 0,
+		Cookies:        cookies,
+		Filter:         filter,
+		AliyunCtx:      aliopts,
 	}
 
 	// define quit signal
@@ -143,7 +143,7 @@ func main() {
 	}()
 
 	errc := make(chan error, 2)
-	timer := time.NewTicker(1 * time.Second)
+	timer := time.NewTicker(2 * time.Second)
 	for {
 		select {
 		case <-timer.C:
@@ -155,4 +155,64 @@ func main() {
 		}
 	}
 
+}
+
+var email string
+var author string
+var version string
+
+func main() {
+
+	app := cli.NewApp()
+	app.Name = "Coin Price Notifier"
+	app.Version = version
+	app.Author = author
+	app.Email = email
+	app.Usage = "dynamic detect coin price and notify through sms"
+	app.HideHelp = true
+
+	cli.AppHelpTemplate = helpTemplate
+
+	appOptions := &AppConfigOpt{}
+	if err := common.ApplyDefaultValues(appOptions); err != nil {
+		exit(err, 1)
+	}
+
+	cliFlags, flagMappings, err := common.GenerateFlags(appOptions)
+	if err != nil {
+		exit(err, 3)
+	}
+
+	app.Flags = append(
+		cliFlags,
+		cli.StringFlag{
+			Name:   "config",
+			Value:  "config.yaml",
+			Usage:  "Config file path",
+			EnvVar: "COIN_CONFIG",
+		},
+	)
+
+	app.Action = func(c *cli.Context) {
+
+		configFile := c.String("config")
+		_, err := os.Stat(homedir.Expand(configFile))
+		if configFile != "config.yaml" || !os.IsNotExist(err) {
+			if err := common.ApplyConfigFileYaml(configFile, appOptions); err != nil {
+				exit(err, 2)
+			}
+		}
+
+		common.ApplyFlags(cliFlags, flagMappings, c, appOptions)
+		Start(appOptions)
+	}
+
+	app.Run(os.Args)
+}
+
+func exit(err error, code int) {
+	if err != nil {
+		fmt.Println(err)
+	}
+	os.Exit(code)
 }
