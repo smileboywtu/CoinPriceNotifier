@@ -2,8 +2,9 @@
 main*
 help
 config.yaml
-CoinNotify.exe
+CoinNotify*
 build.sh
+.goreleaser.yaml
 
 # Binaries for programs and plugins
 *.exe
