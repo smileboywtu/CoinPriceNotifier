@@ -19,7 +19,7 @@ import (
 )
 
 type TaskContext struct {
-	LastNotifyTime int64
+	LastNotifyTime map[string]int64
 	Cookies        []*http.Cookie
 	Filter         feixiaohao.CoinFilter
 	AliyunCtx      aliyun.AliyunSMSOpt
@@ -56,8 +56,8 @@ func Task(ctx *TaskContext, errc chan error) {
 
 	for _, meta := range pricemeta {
 		if !DoCheck(meta.Percent, ctx.Filter) {
-			if (ctx.LastNotifyTime == 0) ||
-				(ctx.LastNotifyTime > 0 && time.Now().Unix()-ctx.LastNotifyTime >= ctx.Filter.TimePeriod) {
+			if (ctx.LastNotifyTime[meta.CoinType] == 0) ||
+				(ctx.LastNotifyTime[meta.CoinType] > 0 && time.Now().Unix()-ctx.LastNotifyTime[meta.CoinType] >= ctx.Filter.TimePeriod) {
 				errs := aliyun.SendSMS(ctx.AliyunCtx, aliyun.SMSContentCtx{
 					meta.Platform,
 					meta.CoinType,
@@ -70,7 +70,7 @@ func Task(ctx *TaskContext, errc chan error) {
 					}()
 				}
 
-				ctx.LastNotifyTime = time.Now().Unix()
+				ctx.LastNotifyTime[meta.CoinType] = time.Now().Unix()
 			}
 		}
 	}
@@ -125,7 +125,7 @@ func Start(config *AppConfigOpt) {
 		TimePeriod: config.NotifyTimePeriod,
 	}
 	taskctx := &TaskContext{
-		LastNotifyTime: 0,
+		LastNotifyTime: make(map[string]int64),
 		Cookies:        cookies,
 		Filter:         filter,
 		AliyunCtx:      aliopts,
