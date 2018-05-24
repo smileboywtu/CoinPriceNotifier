@@ -26,6 +26,9 @@ lowpricepercent: -2.0
 # 币价浮动上线关注点
 highpricepercent: 3.0
 
+# 波动幅度
+amplitude: 1.0
+
 # 货币列表
 cointype:
  - CMT
