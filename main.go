@@ -5,7 +5,6 @@ import (
 	"os"
 	"fmt"
 	"time"
-	"math"
 	"strings"
 	"strconv"
 	"syscall"
@@ -17,6 +16,7 @@ import (
 	"github.com/smileboywtu/CoinNotify/aliyun"
 	"github.com/smileboywtu/CoinNotify/common"
 	"github.com/smileboywtu/CoinNotify/feixiaohao"
+	"math"
 )
 
 type TaskContext struct {
@@ -71,7 +71,6 @@ func Task(ctx *TaskContext, errc chan error) {
 					errc <- err
 				}()
 			}
-
 			ctx.LastNotifyTime[meta.CoinType] = time.Now().Unix()
 		}
 
@@ -86,14 +85,15 @@ func NeedNotify(meta feixiaohao.CoinPriceMeta, ctx TaskContext) (bool, float32) 
 		return false, 0.0
 	}
 
-	// time limit
-	if ctx.LastNotifyTime[meta.CoinType] == 0 || (ctx.LastNotifyTime[meta.CoinType] > 0 && time.Now().Unix()-ctx.LastNotifyTime[meta.CoinType] >= ctx.Filter.TimePeriod) {
+	if ctx.LastNotifyTime[meta.CoinType] == 0 {
 		return true, percentf
 	}
 
-	//  check if price reach threshold
 	if float32(percentf) >= ctx.Filter.High || float32(percentf) <= ctx.Filter.Low {
-		return true, percentf
+		// time limit
+		if ctx.LastNotifyTime[meta.CoinType] > 0 && time.Now().Unix()-ctx.LastNotifyTime[meta.CoinType] >= ctx.Filter.TimePeriod {
+			return true, percentf
+		}
 	}
 
 	// amplitude
