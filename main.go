@@ -5,6 +5,7 @@ import (
 	"os"
 	"fmt"
 	"time"
+	"math"
 	"strings"
 	"strconv"
 	"syscall"
@@ -19,7 +20,9 @@ import (
 )
 
 type TaskContext struct {
-	LastNotifyTime int64
+	LastNotifyTime map[string]int64
+	LastRecord     map[string]float32
+
 	Cookies        []*http.Cookie
 	Filter         feixiaohao.CoinFilter
 	AliyunCtx      aliyun.AliyunSMSOpt
@@ -55,28 +58,54 @@ func Task(ctx *TaskContext, errc chan error) {
 	}
 
 	for _, meta := range pricemeta {
-		if !DoCheck(meta.Percent, ctx.Filter) {
-			if (ctx.LastNotifyTime == 0) ||
-				(ctx.LastNotifyTime > 0 && time.Now().Unix()-ctx.LastNotifyTime >= ctx.Filter.TimePeriod) {
-				errs := aliyun.SendSMS(ctx.AliyunCtx, aliyun.SMSContentCtx{
-					meta.Platform,
-					meta.CoinType,
-					meta.Price,
-					meta.Percent,
-				})
-				if errs != nil {
-					go func() {
-						errc <- err
-					}()
-				}
 
-				ctx.LastNotifyTime = time.Now().Unix()
+		notify, percentf := NeedNotify(meta, *ctx)
+		if notify {
+			errs := aliyun.SendSMS(ctx.AliyunCtx, aliyun.SMSContentCtx{
+				meta.Platform,
+				meta.CoinType,
+				meta.Price,
+				meta.Percent,
+			})
+			if errs != nil {
+				go func() {
+					errc <- err
+				}()
 			}
+			ctx.LastNotifyTime[meta.CoinType] = time.Now().Unix()
 		}
+
+		ctx.LastRecord[meta.CoinType] = percentf
 	}
 }
 
-func DoCheck(percent string, filter feixiaohao.CoinFilter) bool {
+func NeedNotify(meta feixiaohao.CoinPriceMeta, ctx TaskContext) (bool, float32) {
+
+	percentf, errs := ConvertPercent2Float(meta.Percent)
+	if errs != nil {
+		return false, 0.0
+	}
+
+	if ctx.LastNotifyTime[meta.CoinType] == 0 {
+		return true, percentf
+	}
+
+	if float32(percentf) >= ctx.Filter.High || float32(percentf) <= ctx.Filter.Low {
+		// time limit
+		if ctx.LastNotifyTime[meta.CoinType] > 0 && time.Now().Unix()-ctx.LastNotifyTime[meta.CoinType] >= ctx.Filter.TimePeriod {
+			return true, percentf
+		}
+	}
+
+	// amplitude
+	if math.Abs(float64(ctx.LastRecord[meta.CoinType]-percentf)) >= float64(ctx.Filter.Amplitude) {
+		return true, percentf
+	}
+
+	return false, percentf
+}
+
+func ConvertPercent2Float(percent string) (float32, error) {
 	// strip space
 	percent = strings.TrimSpace(percent)
 
@@ -85,14 +114,9 @@ func DoCheck(percent string, filter feixiaohao.CoinFilter) bool {
 
 	percentf, errs := strconv.ParseFloat(percent, 32)
 	if errs != nil {
-		return true
+		return 0.0, errs
 	}
-
-	if float32(percentf) >= filter.High || float32(percentf) <= filter.Low {
-		return false
-	}
-
-	return true
+	return float32(percentf), nil
 }
 
 func Start(config *AppConfigOpt) {
@@ -122,10 +146,13 @@ func Start(config *AppConfigOpt) {
 		CoinType:   config.CoinTypes,
 		High:       config.PriceHighPercent,
 		Low:        config.PriceLowPercent,
+
+		Amplitude:  config.PriceAmplitude,
 		TimePeriod: config.NotifyTimePeriod,
 	}
 	taskctx := &TaskContext{
-		LastNotifyTime: 0,
+		LastNotifyTime: make(map[string]int64),
+		LastRecord:     make(map[string]float32),
 		Cookies:        cookies,
 		Filter:         filter,
 		AliyunCtx:      aliopts,

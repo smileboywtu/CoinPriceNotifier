@@ -22,6 +22,7 @@ type CoinFilter struct {
 	CoinType   []string
 	High       float32
 	Low        float32
+	Amplitude  float32
 	TimePeriod int64
 }
 
